@@ -1,0 +1,51 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-forest-950 text-forest-50 antialiased;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-card;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-forest-500 to-moss-500 px-5 py-3 font-semibold text-white shadow-glow transition hover:from-forest-400 hover:to-moss-400 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-forest-100 transition hover:bg-white/10;
+  }
+
+  .pref-slider {
+    @apply h-2 w-full cursor-pointer appearance-none rounded-full bg-forest-800/80;
+  }
+
+  .pref-slider::-webkit-slider-thumb {
+    @apply h-5 w-5 cursor-pointer appearance-none rounded-full border-2 border-forest-950 bg-forest-400 shadow-glow transition hover:bg-forest-300;
+  }
+
+  .pref-slider::-moz-range-thumb {
+    @apply h-5 w-5 cursor-pointer rounded-full border-2 border-forest-950 bg-forest-400;
+  }
+}
+
+.leaflet-container {
+  font-family: Inter, system-ui, sans-serif;
+  border-radius: 1rem;
+}
+
+.leaflet-popup-content-wrapper {
+  border-radius: 12px !important;
+  background: #052e16 !important;
+  color: #dcfce7 !important;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.leaflet-popup-tip {
+  background: #052e16 !important;
+}
