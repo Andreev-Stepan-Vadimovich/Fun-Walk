@@ -56,8 +56,8 @@ export class RoutesService {
     }
   }
 
-  planRoute(dto: PlanRouteDto): PlannedRoute {
-    const plan = this.routePlanner.plan(
+  async planRoute(dto: PlanRouteDto): Promise<PlannedRoute> {
+    const plan = await this.routePlanner.plan(
       dto.start,
       dto.end,
       dto.preferences,
@@ -74,6 +74,7 @@ export class RoutesService {
       highlights: plan.highlights,
       createdAt: new Date().toISOString(),
       algorithm: plan.algorithm,
+      routingSource: plan.routingSource,
       graphStats: {
         nodes: plan.graphNodeCount,
         edges: plan.graphEdgeCount,

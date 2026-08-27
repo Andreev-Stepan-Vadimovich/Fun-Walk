@@ -33,9 +33,12 @@ export default function RouteStats({ route }: Props) {
           </p>
           {route.graphStats && (
             <p className="mt-1 text-xs text-forest-500">
-              Dijkstra · граф {route.graphStats.nodes} узлов,{' '}
-              {route.graphStats.edges} рёбер · вес{' '}
-              {route.graphStats.pathWeight}
+              Dijkstra ·{' '}
+              {route.routingSource === 'osrm'
+                ? 'по дорогам и тропам (OSM)'
+                : 'прямая линия (OSRM недоступен)'}{' '}
+              · граф {route.graphStats.nodes} узлов, {route.graphStats.edges}{' '}
+              рёбер
             </p>
           )}
         </div>

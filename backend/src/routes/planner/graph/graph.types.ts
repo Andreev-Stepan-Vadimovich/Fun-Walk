@@ -31,4 +31,6 @@ export interface RoutePlanResult {
   graphEdgeCount: number;
   pathWeight: number;
   algorithm: 'dijkstra';
+  /** Источник геометрии маршрута */
+  routingSource: 'osrm' | 'direct';
 }

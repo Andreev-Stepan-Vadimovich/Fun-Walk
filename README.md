@@ -179,10 +179,26 @@ dist[v] = min(dist[v], dist[u] + w(u,v))   // релаксация рёбер
 
 Сложность: O((V + E) log V). Реализация: `backend/src/routes/planner/graph/dijkstra.ts`.
 
-### 4. Постобработка
+### 4. Маршрутизация по проходимым путям (OSRM)
 
-- Сглаживание polyline скользящим средним (окно 3 точки)
-- Расчёт метрик: суммарная длина (Haversine), покрытие зелёными зонами, средний AQI, итоговый балл
+После выбора POI алгоритмом Dijkstra геометрия маршрута строится через **OSRM**
+(Open Source Routing Machine) с профилем `foot` — данные OpenStreetMap:
+
+- тротуары, пешеходные дорожки, аллеи парков
+- маршрут **не** идёт через здания, реки и непроходимые зоны
+- точки автоматически «привязываются» (snap) к ближайшей дороге
+
+```
+GET /route/v1/foot/{lon,lat;...}?overview=full&geometries=geojson
+```
+
+Сервис: `backend/src/routes/planner/routing/osrm-routing.service.ts`
+
+Переменная окружения `OSRM_URL` (по умолчанию `https://router.project-osrm.org`).
+
+### 5. Расчёт метрик
+
+- Расчёт метрик: суммарная длина (из OSRM или Haversine), покрытие зелёными зонами, средний AQI, итоговый балл
 
 ### Структура planner-модуля
 
@@ -195,6 +211,8 @@ backend/src/routes/planner/
 └── graph/
     ├── graph.types.ts         # типы графа
     └── dijkstra.ts            # алгоритм Dijkstra
+└── routing/
+    └── osrm-routing.service.ts # маршруты по дорогам OSM (foot)
 ```
 
 ## Переменные окружения
@@ -202,6 +220,7 @@ backend/src/routes/planner/
 | Переменная | По умолчанию | Описание |
 |-----------|--------------|----------|
 | `PORT` | `3000` | Порт backend |
+| `OSRM_URL` | `https://router.project-osrm.org` | URL OSRM-сервера для пешеходной маршрутизации |
 
 ## Автор
 

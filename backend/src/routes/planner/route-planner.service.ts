@@ -8,7 +8,7 @@ import {
 import { POINTS_OF_INTEREST } from '../data/points-of-interest';
 import { WeightedGraph, GraphNode, RoutePlanResult } from './graph/graph.types';
 import { dijkstra, countEdges } from './graph/dijkstra';
-import { haversineKm, smoothPath } from './math/geo.util';
+import { haversineKm } from './math/geo.util';
 import {
   scorePois,
   selectCandidatePois,
@@ -18,6 +18,7 @@ import {
   buildPreferenceVector,
 } from './math/poi-scoring.util';
 import { dotProduct } from './math/geo.util';
+import { OsrmRoutingService } from './routing/osrm-routing.service';
 
 /** Коэффициент η в формуле веса ребра: w(u,v) = d_H(u,v) / (1 + η · Ã(v)) */
 const ATTRACTIVENESS_ETA = 2.5;
@@ -30,20 +31,25 @@ const K_NEIGHBORS = 4;
 
 @Injectable()
 export class RoutePlannerService {
+  constructor(private readonly osrmRouting: OsrmRoutingService) {}
+
   /**
    * Главный метод планирования маршрута.
    *
    * Этапы:
    * 1. Оценка POI — скalarное произведение w · f(p) минус штраф за отклонение
    * 2. Построение k-NN взвешенного графа G = (V, E)
-   * 3. Поиск оптимального пути алгоритмом Dijkstra
-   * 4. Сглаживание polyline и расчёт метрик
+   * 3. Поиск оптимального пути алгоритмом Dijkstra (выбор POI)
+   * 4. OSRM foot — привязка к дорогам, тропам и аллеям OpenStreetMap
+   * 5. Расчёт метрик
    */
-  plan(
+  async plan(
     start: LatLng,
     end: LatLng,
     preferences: RoutePreferences,
-  ): RoutePlanResult & { metrics: RouteMetrics; highlights: string[] } {
+  ): Promise<
+    RoutePlanResult & { metrics: RouteMetrics; highlights: string[] }
+  > {
     const scored = scorePois(POINTS_OF_INTEREST, start, end, preferences);
     const candidates = selectCandidatePois(scored);
 
@@ -59,10 +65,29 @@ export class RoutePlannerService {
       .map((id) => graph.nodes.get(id)!)
       .filter(Boolean);
 
-    const rawWaypoints = dijkstraResult.path.map(
+    /** Ключевые точки для OSRM — вершины графа без сглаживания */
+    const graphWaypoints = dijkstraResult.path.map(
       (id) => graph.nodes.get(id)!.location,
     );
-    const waypoints = smoothPath(rawWaypoints);
+
+    const osrmResult = await this.osrmRouting.routeFootWithFallback(
+      graphWaypoints,
+    );
+
+    let waypoints: LatLng[];
+    let routingSource: 'osrm' | 'direct';
+    let osrmDistanceKm: number | undefined;
+    let osrmDurationMin: number | undefined;
+
+    if (osrmResult) {
+      waypoints = this.osrmRouting.deduplicateGeometry(osrmResult.geometry);
+      routingSource = 'osrm';
+      osrmDistanceKm = osrmResult.distanceKm;
+      osrmDurationMin = osrmResult.durationMin;
+    } else {
+      waypoints = graphWaypoints;
+      routingSource = 'direct';
+    }
 
     const metrics = this.calculateMetrics(
       start,
@@ -72,6 +97,8 @@ export class RoutePlannerService {
       candidates.map((c) => c.poi),
       preferences,
       dijkstraResult.totalWeight,
+      osrmDistanceKm,
+      osrmDurationMin,
     );
 
     return {
@@ -81,6 +108,7 @@ export class RoutePlannerService {
       graphEdgeCount: countEdges(graph.adjacency),
       pathWeight: dijkstraResult.totalWeight,
       algorithm: 'dijkstra',
+      routingSource,
       metrics,
       highlights: visitedPois
         .filter((n) => n.poiName)
@@ -97,15 +125,12 @@ export class RoutePlannerService {
    *
    * Вес ребра (u, v):
    *   w(u,v) = d_H(u,v) / (1 + η · max(Ã(u), Ã(v)))
-   *
-   * Чем привлекательнее вершина, тем меньше «эффективная» длина ребра —
-   * Dijkstra выбирает путь через парки и зелёные зоны.
    */
   private buildWeightedGraph(
     start: LatLng,
     end: LatLng,
     candidates: ReturnType<typeof selectCandidatePois>,
-    preferences: RoutePreferences,
+    _preferences: RoutePreferences,
   ): WeightedGraph {
     const nodes = new Map<string, GraphNode>();
     const adjacency = new Map<string, { targetId: string; weight: number }[]>();
@@ -145,7 +170,10 @@ export class RoutePlannerService {
         .map((other, j) => ({
           j,
           other,
-          dist: i === j ? Infinity : haversineKm(nodeList[i].location, other.location),
+          dist:
+            i === j
+              ? Infinity
+              : haversineKm(nodeList[i].location, other.location),
         }))
         .filter((d) => d.dist < Infinity)
         .sort((a, b) => a.dist - b.dist);
@@ -167,7 +195,11 @@ export class RoutePlannerService {
         const u = nodeList[i];
         const v = nodeList[j];
         const geoDist = haversineKm(u.location, v.location);
-        const weight = this.edgeWeight(geoDist, u.attractiveness, v.attractiveness);
+        const weight = this.edgeWeight(
+          geoDist,
+          u.attractiveness,
+          v.attractiveness,
+        );
         this.addEdge(adjacency, u.id, v.id, weight);
       }
     }
@@ -175,10 +207,6 @@ export class RoutePlannerService {
     return { nodes, adjacency };
   }
 
-  /**
-   * w(u,v) = d_H(u,v) / (1 + η · max(Ã(u), Ã(v)))
-   * Вес всегда > 0 — корректно для Dijkstra.
-   */
   private edgeWeight(
     geoDistKm: number,
     attractivenessU: number,
@@ -206,8 +234,11 @@ export class RoutePlannerService {
     allCandidatePois: PointOfInterest[],
     preferences: RoutePreferences,
     graphPathWeight: number,
+    osrmDistanceKm?: number,
+    osrmDurationMin?: number,
   ): RouteMetrics {
-    const distanceKm = pathLengthKm(waypoints);
+    const geometryDistanceKm = pathLengthKm(waypoints);
+    const distanceKm = osrmDistanceKm ?? geometryDistanceKm;
     const directDistance = haversineKm(start, end);
     const detourRatio = distanceKm / Math.max(directDistance, 0.001);
 
@@ -228,7 +259,7 @@ export class RoutePlannerService {
       Math.round(
         (greenPois.length / Math.max(visitedPoiObjects.length, 1)) * 65 +
           (detourRatio > 1.15 ? 20 : 8) +
-          waypoints.length * 2,
+          Math.min(waypoints.length / 10, 15),
       ),
     );
 
@@ -255,7 +286,8 @@ export class RoutePlannerService {
           )
         : 55;
 
-    const durationMin = Math.round((distanceKm / 5) * 60);
+    const durationMin =
+      osrmDurationMin ?? Math.round((distanceKm / 5) * 60);
 
     const w = buildPreferenceVector(preferences);
     const wSum = w.reduce((s, v) => s + v, 0) || 1;
@@ -267,7 +299,10 @@ export class RoutePlannerService {
     }
 
     const pathEfficiency = directDistance / Math.max(distanceKm, 0.001);
-    const graphBonus = Math.min(15, graphPathWeight > 0 ? 10 / graphPathWeight : 0);
+    const graphBonus = Math.min(
+      15,
+      graphPathWeight > 0 ? 10 / graphPathWeight : 0,
+    );
 
     const score = Math.round(
       greenCoveragePercent * 0.25 +
@@ -290,13 +325,21 @@ export class RoutePlannerService {
     };
   }
 
-  private fallbackDirectRoute(
+  private async fallbackDirectRoute(
     start: LatLng,
     end: LatLng,
-    preferences: RoutePreferences,
-  ): RoutePlanResult & { metrics: RouteMetrics; highlights: string[] } {
-    const waypoints = [start, end];
-    const distanceKm = haversineKm(start, end);
+    _preferences: RoutePreferences,
+  ): Promise<
+    RoutePlanResult & { metrics: RouteMetrics; highlights: string[] }
+  > {
+    const osrmResult = await this.osrmRouting.routeFoot([start, end]);
+
+    const waypoints = osrmResult
+      ? this.osrmRouting.deduplicateGeometry(osrmResult.geometry)
+      : [start, end];
+
+    const distanceKm = osrmResult?.distanceKm ?? haversineKm(start, end);
+    const routingSource = osrmResult ? 'osrm' : 'direct';
 
     return {
       waypoints,
@@ -305,15 +348,17 @@ export class RoutePlannerService {
       graphEdgeCount: 1,
       pathWeight: distanceKm,
       algorithm: 'dijkstra',
+      routingSource,
       highlights: [],
       metrics: {
         distanceKm: Math.round(distanceKm * 100) / 100,
-        durationMin: Math.round((distanceKm / 5) * 60),
-        greenCoveragePercent: 10,
+        durationMin:
+          osrmResult?.durationMin ?? Math.round((distanceKm / 5) * 60),
+        greenCoveragePercent: routingSource === 'osrm' ? 15 : 10,
         bikePathPercent: 0,
         avgAirQualityIndex: 60,
         avgNoiseLevel: 55,
-        score: 30,
+        score: routingSource === 'osrm' ? 35 : 30,
       },
     };
   }

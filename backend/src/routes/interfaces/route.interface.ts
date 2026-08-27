@@ -44,6 +44,8 @@ export interface PlannedRoute {
   createdAt: string;
   /** Алгоритм, использованный при построении */
   algorithm: 'dijkstra';
+  /** Источник геометрии: osrm — по дорогам OSM, direct — прямые линии */
+  routingSource: 'osrm' | 'direct';
   /** Статистика графа для отчёта */
   graphStats: {
     nodes: number;

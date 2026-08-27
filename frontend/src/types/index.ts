@@ -33,6 +33,7 @@ export interface PlannedRoute {
   highlights: string[];
   createdAt: string;
   algorithm: 'dijkstra';
+  routingSource: 'osrm' | 'direct';
   graphStats: {
     nodes: number;
     edges: number;
