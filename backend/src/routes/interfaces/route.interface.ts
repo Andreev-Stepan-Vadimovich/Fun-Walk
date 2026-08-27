@@ -42,6 +42,14 @@ export interface PlannedRoute {
   metrics: RouteMetrics;
   highlights: string[];
   createdAt: string;
+  /** Алгоритм, использованный при построении */
+  algorithm: 'dijkstra';
+  /** Статистика графа для отчёта */
+  graphStats: {
+    nodes: number;
+    edges: number;
+    pathWeight: number;
+  };
 }
 
 export interface RouteSummary {

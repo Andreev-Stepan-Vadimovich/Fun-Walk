@@ -32,6 +32,12 @@ export interface PlannedRoute {
   metrics: RouteMetrics;
   highlights: string[];
   createdAt: string;
+  algorithm: 'dijkstra';
+  graphStats: {
+    nodes: number;
+    edges: number;
+    pathWeight: number;
+  };
 }
 
 export interface RouteSummary {

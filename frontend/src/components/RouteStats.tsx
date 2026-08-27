@@ -31,6 +31,13 @@ export default function RouteStats({ route }: Props) {
           <p className="text-sm text-forest-400">
             {new Date(route.createdAt).toLocaleString('ru-RU')}
           </p>
+          {route.graphStats && (
+            <p className="mt-1 text-xs text-forest-500">
+              Dijkstra · граф {route.graphStats.nodes} узлов,{' '}
+              {route.graphStats.edges} рёбер · вес{' '}
+              {route.graphStats.pathWeight}
+            </p>
+          )}
         </div>
         <ScoreRing score={metrics.score} />
       </div>
