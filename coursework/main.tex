@@ -1,0 +1,58 @@
+% !TEX program = xelatex
+\documentclass[14pt,a4paper,openany]{extreport}
+
+\usepackage{fontspec}
+\setmainfont{Times New Roman}[
+  Ligatures=TeX,
+  BoldFont = Times New Roman Bold,
+  ItalicFont = Times New Roman Italic,
+  BoldItalicFont = Times New Roman Bold Italic
+]
+\setsansfont{Arial}
+\setmonofont{Consolas}[Scale=0.85]
+
+\usepackage{polyglossia}
+\setdefaultlanguage{russian}
+\setotherlanguage{english}
+
+\usepackage{gost}
+\usepackage{csquotes}
+\usepackage[backend=biber,style=numeric,sorting=none,language=russian]{biblatex}
+\addbibresource{bibliography.bib}
+
+% Листинги TypeScript
+\lstdefinelanguage{TypeScript}{
+  keywords={typeof,new,true,false,catch,function,return,null,throw,case,default,
+    if,in,while,do,else,break,continue,switch,for,of,as,const,let,var,export,
+    import,from,interface,type,async,await,implements,extends,private,public,
+    readonly,number,string,boolean,void,Promise,Map,Set,Math},
+  sensitive=true,
+  comment=[l]{//},
+  morecomment=[s]{/*}{*/},
+  string=[b]",
+  string=[b]',
+}
+
+\begin{document}
+
+\input{chapters/00-title}
+\input{chapters/00-assignment}
+\input{chapters/00-abstract}
+
+\tableofcontents
+\clearpage
+
+\input{chapters/01-introduction}
+\input{chapters/02-analysis}
+\input{chapters/03-math-model}
+\input{chapters/04-design}
+\input{chapters/05-implementation}
+\input{chapters/06-testing}
+\input{chapters/07-conclusion}
+
+\printbibliography[heading=bibintoc,title={Список использованных источников}]
+
+\appendix
+\input{appendices/listings}
+
+\end{document}

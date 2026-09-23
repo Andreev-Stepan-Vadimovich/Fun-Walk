@@ -1,4 +1,5 @@
 import {
+  IsIn,
   IsNumber,
   IsOptional,
   IsString,
@@ -24,7 +25,7 @@ export class RoutePreferencesDto {
   @IsNumber()
   @Min(0)
   @Max(10)
-  greenZones!: number;
+  nature!: number;
 
   @IsNumber()
   @Min(0)
@@ -45,11 +46,6 @@ export class RoutePreferencesDto {
   @Min(0)
   @Max(10)
   waterfront!: number;
-
-  @IsNumber()
-  @Min(0)
-  @Max(10)
-  parks!: number;
 }
 
 export class PlanRouteDto {
@@ -68,4 +64,9 @@ export class PlanRouteDto {
   @IsOptional()
   @IsString()
   name?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['quick', 'waterfront', 'romantic', 'green', 'bike', 'peaceful', 'custom'])
+  presetId?: string;
 }

@@ -6,21 +6,31 @@ import PreferencesPanel from './components/PreferencesPanel';
 import RouteStats from './components/RouteStats';
 import SavedRoutes from './components/SavedRoutes';
 import {
-  DEFAULT_PREFERENCES,
+  ROUTE_PRESETS,
   type LatLng,
   type PlannedRoute,
   type PointOfInterest,
+  type PresetId,
   type RoutePreferences,
   type RouteSummary,
 } from './types';
 
 type SelectMode = 'start' | 'end' | null;
 
+function samePoint(a: LatLng | null, b: LatLng | null): boolean {
+  if (!a || !b) return false;
+  return Math.abs(a.lat - b.lat) < 1e-6 && Math.abs(a.lng - b.lng) < 1e-6;
+}
+
 function App() {
   const [start, setStart] = useState<LatLng | null>(null);
   const [end, setEnd] = useState<LatLng | null>(null);
-  const [preferences, setPreferences] =
-    useState<RoutePreferences>(DEFAULT_PREFERENCES);
+  const [preferences, setPreferences] = useState<RoutePreferences>(
+    ROUTE_PRESETS.find((p) => p.id === 'peaceful')!.preferences,
+  );
+  const [activePresetId, setActivePresetId] = useState<PresetId | null>(
+    'peaceful',
+  );
   const [route, setRoute] = useState<PlannedRoute | null>(null);
   const [savedRoutes, setSavedRoutes] = useState<RouteSummary[]>([]);
   const [poiList, setPoiList] = useState<PointOfInterest[]>([]);
@@ -29,15 +39,29 @@ function App() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([api.getDefaults(), api.getPoi(), api.getRoutes()])
-      .then(([defaults, poi, routes]) => {
+    Promise.all([api.getDefaults(), api.getRoutes()])
+      .then(([defaults, routes]) => {
         setStart(defaults.start);
         setEnd(defaults.end);
-        setPoiList(poi);
         setSavedRoutes(routes);
       })
       .catch(() => setError('Не удалось подключиться к серверу. Запустите backend.'));
   }, []);
+
+  useEffect(() => {
+    if (!start || !end) return;
+    api
+      .getPoi(start, end)
+      .then(setPoiList)
+      .catch(() => undefined);
+  }, [start, end]);
+
+  useEffect(() => {
+    if (!route || !start || !end) return;
+    if (!samePoint(start, route.start) || !samePoint(end, route.end)) {
+      setRoute(null);
+    }
+  }, [start, end, route]);
 
   const refreshSaved = useCallback(async () => {
     const routes = await api.getRoutes();
@@ -49,7 +73,12 @@ function App() {
     setLoading(true);
     setError(null);
     try {
-      const planned = await api.planRoute({ start, end, preferences });
+      const planned = await api.planRoute({
+        start,
+        end,
+        preferences,
+        presetId: activePresetId ?? undefined,
+      });
       setRoute(planned);
       await refreshSaved();
     } catch {
@@ -76,6 +105,7 @@ function App() {
       setStart(loaded.start);
       setEnd(loaded.end);
       setPreferences(loaded.preferences);
+      setActivePresetId(loaded.presetId ?? null);
     } catch {
       setError('Не удалось загрузить маршрут');
     }
@@ -92,12 +122,12 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-forest-800/40 via-forest-950 to-forest-950">
+    <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-sage-100 via-cream-100 to-blush-50">
       <Header />
 
       <main className="mx-auto max-w-7xl px-4 pb-12 pt-6">
         {error && (
-          <div className="mb-4 animate-slide-up rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          <div className="mb-4 animate-slide-up rounded-xl border border-blush-200 bg-blush-50 px-4 py-3 text-sm text-blush-700">
             {error}
           </div>
         )}
@@ -108,13 +138,21 @@ function App() {
               start={start}
               end={end}
               preferences={preferences}
+              activePresetId={activePresetId}
               selectMode={selectMode}
               loading={loading}
-              onPreferencesChange={setPreferences}
+              onPreferencesChange={(prefs) => {
+                setPreferences(prefs);
+                setActivePresetId('custom');
+              }}
+              onPresetChange={(id, prefs) => {
+                setActivePresetId(id);
+                setPreferences(prefs);
+              }}
               onSelectModeChange={setSelectMode}
               onPlan={handlePlan}
             />
-            {route && <RouteStats route={route} />}
+            {route && <RouteStats route={route} poiList={poiList} />}
             <SavedRoutes
               routes={savedRoutes}
               activeId={route?.id}

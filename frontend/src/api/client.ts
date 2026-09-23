@@ -2,6 +2,7 @@ import type {
   LatLng,
   PlannedRoute,
   PointOfInterest,
+  PresetId,
   RoutePreferences,
   RouteSummary,
 } from '../types';
@@ -32,7 +33,18 @@ export const api = {
   getDefaults: () =>
     request<{ start: LatLng; end: LatLng }>('/defaults'),
 
-  getPoi: () => request<PointOfInterest[]>('/poi'),
+  getPoi: (start?: LatLng | null, end?: LatLng | null) => {
+    if (start && end) {
+      const params = new URLSearchParams({
+        startLat: String(start.lat),
+        startLng: String(start.lng),
+        endLat: String(end.lat),
+        endLng: String(end.lng),
+      });
+      return request<PointOfInterest[]>(`/poi?${params.toString()}`);
+    }
+    return request<PointOfInterest[]>('/poi');
+  },
 
   getRoutes: () => request<RouteSummary[]>('/routes'),
 
@@ -42,6 +54,7 @@ export const api = {
     start: LatLng;
     end: LatLng;
     preferences: RoutePreferences;
+    presetId?: PresetId;
     name?: string;
   }) =>
     request<PlannedRoute>('/routes/plan', {

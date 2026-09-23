@@ -3,6 +3,15 @@ export interface LatLng {
   lng: number;
 }
 
+export type PresetId =
+  | 'quick'
+  | 'waterfront'
+  | 'romantic'
+  | 'green'
+  | 'bike'
+  | 'peaceful'
+  | 'custom';
+
 export interface PointOfInterest {
   id: string;
   name: string;
@@ -14,12 +23,11 @@ export interface PointOfInterest {
 }
 
 export interface RoutePreferences {
-  greenZones: number;
+  nature: number;
   bikePaths: number;
   airQuality: number;
   quietAreas: number;
   waterfront: number;
-  parks: number;
 }
 
 export interface RouteMetrics {
@@ -39,14 +47,12 @@ export interface PlannedRoute {
   end: LatLng;
   waypoints: LatLng[];
   preferences: RoutePreferences;
+  presetId?: PresetId;
   metrics: RouteMetrics;
   highlights: string[];
   createdAt: string;
-  /** Алгоритм, использованный при построении */
   algorithm: 'dijkstra';
-  /** Источник геометрии: osrm — по дорогам OSM, direct — прямые линии */
   routingSource: 'osrm' | 'direct';
-  /** Статистика графа для отчёта */
   graphStats: {
     nodes: number;
     edges: number;

@@ -1,0 +1,182 @@
+\chapter{Программная реализация}
+\label{ch:implementation}
+
+\section{Технологический стек}
+
+Реализация выполнена на TypeScript --- типизированном надмножестве JavaScript.
+Табл.~\ref{tab:stack} суммирует используемые технологии.
+
+\begin{table}[H]
+\centering
+\caption{Технологический стек Fun-Walk}
+\label{tab:stack}
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Слой} & \textbf{Технология} & \textbf{Версия} \\
+\midrule
+Runtime & Node.js & $\geq 18$ \\
+Backend framework & NestJS & 10.x \\
+Frontend framework & React & 18.x \\
+Сборка frontend & Vite & 6.x \\
+Стили & Tailwind CSS & 3.x \\
+Карты & Leaflet, react-leaflet & 1.9 / 4.2 \\
+Валидация & class-validator & 0.14 \\
+Маршрутизация & OSRM (HTTP) & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Реализация математического ядра}
+
+\subsection{Модуль geo.util.ts}
+
+Функция \texttt{haversineKm} непосредственно кодирует формулы
+\eqref{eq:haversine-a}--\eqref{eq:haversine-d}:
+
+\begin{lstlisting}[language=TypeScript,caption={Реализация формулы Haversine},label={lst:haversine}]
+export function haversineKm(a: LatLng, b: LatLng): number {
+  const dLat = toRadians(b.lat - a.lat);
+  const dLng = toRadians(b.lng - a.lng);
+  const lat1 = toRadians(a.lat);
+  const lat2 = toRadians(b.lat);
+
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+
+  return EARTH_RADIUS_KM * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+}
+\end{lstlisting}
+
+Функция \texttt{projectOntoSegment} реализует проекцию \eqref{eq:projection}:
+вычисляется параметр $t$, затем Haversine до точки проекции. При вырожденном
+отрезке ($S = E$) возвращается расстояние до старта.
+
+\subsection{Модуль poi-scoring.util.ts}
+
+Функция \texttt{scorePois} объединяет формулы \eqref{eq:dot-score} и
+\eqref{eq:poi-score}:
+
+\begin{lstlisting}[language=TypeScript,caption={Оценка POI},label={lst:scoring}]
+const w = buildPreferenceVector(preferences);
+const wNorm = Math.sqrt(w.reduce((s, v) => s + v * v, 0)) || 1;
+
+const dotScore = dotProduct(w, f) / wNorm;
+const { perpendicularKm } = projectOntoSegment(poi.location, start, end);
+const totalScore = dotScore - corridorAlpha * perpendicularKm;
+\end{lstlisting}
+
+Константа \texttt{corridorAlpha = 0.15} соответствует $\alpha$ в модели.
+Функция \texttt{selectCandidatePois} фильтрует по \texttt{minScore = 0.05}
+и ограничивает \texttt{maxCount = 8}.
+
+\subsection{Построение графа}
+
+Метод \texttt{RoutePlannerService.buildWeightedGraph()}:
+\begin{enumerate}
+  \item Создаёт вершины \texttt{start}, \texttt{end} и POI с полями
+        \texttt{attractiveness};
+  \item Вычисляет матрицу расстояний $d_H$ для всех пар;
+  \item Добавляет рёбра k-NN ($k = 4$) и рёбра с $d_H \leq 3{,}5$~км;
+  \item Присваивает веса по \eqref{eq:edge-weight} с \texttt{ATTRACTIVENESS\_ETA = 2.5}.
+\end{enumerate}
+
+\subsection{Алгоритм Dijkstra}
+
+Файл \texttt{dijkstra.ts} реализует классический алгоритм с массивом-очередью.
+Ключевой фрагмент релаксации:
+
+\begin{lstlisting}[language=TypeScript,caption={Релаксация ребра в Dijkstra},label={lst:dijkstra-relax}]
+const alt = (dist.get(u) ?? Infinity) + weight;
+if (alt < (dist.get(v) ?? Infinity)) {
+  dist.set(v, alt);
+  previous.set(v, u);
+  if (!queue.includes(v)) queue.push(v);
+}
+\end{lstlisting}
+
+Восстановление пути выполняется обратным обходом \texttt{previous} от \texttt{end}
+к \texttt{start}. Функция \texttt{countEdges} делит сумму степеней на 2 для
+неориентированного графа.
+
+\section{Интеграция с OSRM}
+
+Сервис \texttt{OsrmRoutingService} инкапсулирует HTTP-взаимодействие:
+\begin{itemize}
+  \item формирование URL с координатами \texttt{lng,lat} (порядок OSRM!);
+  \item парсинг GeoJSON geometry из ответа;
+  \item извлечение \texttt{distance} (м) и \texttt{duration} (с);
+  \item метод \texttt{routeFootWithFallback} с сегментной склейкой;
+  \item \texttt{deduplicateGeometry} с $\varepsilon = 10^{-5}$.
+\end{itemize}
+
+При недоступности OSRM \texttt{RoutePlannerService} возвращает
+\texttt{routingSource: 'direct'} и waypoints из вершин графа --- пользователь
+видит предупреждение в UI.
+
+\section{Реализация REST-слоя}
+
+\texttt{RoutesController} обрабатывает POST \texttt{/api/routes/plan}:
+
+\begin{lstlisting}[language=TypeScript,caption={Фрагмент контроллера},label={lst:controller}]
+@Post('routes/plan')
+planRoute(@Body() dto: PlanRouteDto): PlannedRoute {
+  return this.routesService.planRoute(dto);
+}
+\end{lstlisting}
+
+\texttt{RoutesService} генерирует UUID, автоматическое имя маршрута
+(два топ-предпочтения: «Прогулка: парки + чистый воздух») и сохраняет объект
+в \texttt{Map}.
+
+Bootstrap (\texttt{main.ts}) включает глобальный \texttt{ValidationPipe}
+(\texttt{whitelist: true}, \texttt{transform: true}) и CORS.
+
+\section{Реализация frontend}
+
+\subsection{API-клиент}
+
+Модуль \texttt{api/client.ts} содержит типизированные функции
+\texttt{planRoute}, \texttt{fetchPois}, \texttt{fetchRoutes} и др.
+Базовый путь \texttt{/api} проксируется Vite.
+
+\subsection{Компонент MapView}
+
+Использует \texttt{Polyline} react-leaflet для отображения \texttt{waypoints}.
+При новом маршруте вызывается \texttt{fitBounds} для автоматического масштаба.
+POI отображаются маркерами с popup (название, тип, AQI, шум).
+
+\subsection{Компонент RouteStats}
+
+Визуализирует \texttt{RouteMetrics}: дистанция, время, зелёное покрытие,
+средний AQI, итоговый score (кольцевой progress). Блок \texttt{highlights}
+перечисляет посещённые POI.
+
+\subsection{Управление состоянием}
+
+Состояние хранится в \texttt{useState} корневого \texttt{App.tsx}:
+\texttt{preferences}, \texttt{start/end}, \texttt{currentRoute}, \texttt{savedRoutes}.
+Отдельный state manager не используется --- достаточно для масштаба прототипа.
+
+\section{Организация исходного кода}
+
+Структура репозитория:
+\begin{verbatim}
+Fun-Walk/
+  backend/src/routes/planner/   # алгоритмы
+  backend/src/routes/data/      # POI Москвы
+  frontend/src/components/      # UI
+  frontend/src/api/             # HTTP-клиент
+  scripts/                      # dev.ps1, dev.sh
+  coursework/                   # пояснительная записка (LaTeX)
+\end{verbatim}
+
+Сборка production: \texttt{npm run build} (backend \texttt{nest build}, frontend
+\texttt{vite build}).
+
+\section{Выводы по главе}
+
+Программная реализация непосредственно следует математической модели главы~\ref{ch:math}:
+формулы закодированы в модулях \texttt{math/}, Dijkstra --- в \texttt{graph/},
+интеграция OSRM --- в \texttt{routing/}. TypeScript обеспечивает типобезопасность
+на всех уровнях. Frontend реализует интуитивный UI без дублирования бизнес-логики.

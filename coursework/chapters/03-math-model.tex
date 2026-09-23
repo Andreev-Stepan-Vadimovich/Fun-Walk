@@ -1,0 +1,317 @@
+\chapter{Математическая модель и алгоритмы планирования маршрута}
+\label{ch:math}
+
+Настоящая глава содержит формальное описание математического аппарата,
+реализованного в модуле \texttt{backend/src/routes/planner/}. Материал
+структурирован от частных формул к общему алгоритму.
+
+\section{Признаковое пространство точек интереса}
+
+Каждая POI $p \in \mathcal{P}$ отображается в шестимерный признаковый вектор
+\begin{equation}
+  \mathbf{f}(p) = (f_1, f_2, f_3, f_4, f_5, f_6)^\top \in [0, 1]^6,
+  \label{eq:feature-vector}
+\end{equation}
+где компоненты соответствуют критериям: парки, зелёные зоны, велодорожки,
+качество воздуха, тихие места, набережные.
+
+\subsection{Типовые признаки}
+
+Для дискретного типа объекта задаются константы (табл.~\ref{tab:type-features}).
+
+\begin{table}[H]
+\centering
+\caption{Типовые коэффициенты признаков POI}
+\label{tab:type-features}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Тип} & $f_{\text{parks}}$ & $f_{\text{green}}$ & $f_{\text{bike}}$ & $f_{\text{water}} $ \\
+\midrule
+\texttt{park} & 1.0 & 0.6 & 0 & 0 \\
+\texttt{green\_zone} & 0.3 & 1.0 & 0 & 0 \\
+\texttt{bike\_path} & 0 & 0 & 1.0 & 0 \\
+\texttt{waterfront} & 0 & 0.4 & 0 & 1.0 \\
+\texttt{square} & 0 & 0 & 0 & 0 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Непрерывные признаки}
+
+Качество воздуха и акустический комфорт моделируются линейным преобразованием
+измеренных показателей:
+\begin{align}
+  f_{\text{air}}(p) &= \frac{100 - \mathrm{AQI}(p)}{100}, \label{eq:air} \\
+  f_{\text{quiet}}(p) &= \frac{100 - \mathrm{noise}(p)}{100}. \label{eq:quiet}
+\end{align}
+
+Чем ниже AQI и уровень шума, тем выше соответствующий признак. Такая нормализация
+приводит все компоненты к единому диапазону $[0, 1]$, что упрощает интерпретацию
+и комбинирование с весами пользователя.
+
+\section{Вектор предпочтений и скалярная оценка}
+
+Пользователь задаёт вектор $\mathbf{w} = (w_1, \ldots, w_6)^\top$, где
+$w_i \in [0, 10]$. Нормированное скалярное произведение:
+\begin{equation}
+  S(p) = \frac{\mathbf{w} \cdot \mathbf{f}(p)}{\|\mathbf{w}\|_2},
+  \label{eq:dot-score}
+\end{equation}
+где
+\begin{equation}
+  \mathbf{w} \cdot \mathbf{f}(p) = \sum_{i=1}^{6} w_i f_i(p), \qquad
+  \|\mathbf{w}\|_2 = \sqrt{\sum_{i=1}^{6} w_i^2}.
+  \label{eq:norm}
+\end{equation}
+
+Деление на $\|\mathbf{w}\|_2$ делает оценку инвариантной к масштабу ползунков:
+одновременное увеличение всех приоритетов не меняет относительный рейтинг POI.
+
+\section{Штраф за отклонение от коридора маршрута}
+
+POI, удалённые от прямой «старт--финиш», не должны доминировать в маршруте.
+Вводится перпендикулярное расстояние $d_\perp(p, S \to E)$.
+
+\subsection{Проекция точки на отрезок}
+
+В локальной декартовой системе (долгота $x$, широта $y$) для отрезка $AB$ и точки $P$:
+\begin{equation}
+  t = \frac{(P - A) \cdot (B - A)}{\|B - A\|^2}, \quad t \leftarrow \mathrm{clamp}(t, 0, 1).
+  \label{eq:projection}
+\end{equation}
+Точка проекции: $A + t(B - A)$. Расстояние $d_\perp$ вычисляется формулой Haversine
+между $P$ и проекцией (см.~разд.~\ref{sec:haversine}).
+
+\subsection{Итоговая оценка POI}
+
+\begin{equation}
+  \mathrm{score}(p) = S(p) - \alpha \cdot d_\perp(p, S \to E),
+  \label{eq:poi-score}
+\end{equation}
+где $\alpha = 0{,}15$~км$^{-1}$ --- эмпирический коэффициент штрафа.
+
+Нормализованная \textbf{привлекательность} для построения графа:
+\begin{equation}
+  \tilde{A}(p) = \mathrm{clamp}\!\left(\frac{S(p)}{10},\, 0,\, 1\right).
+  \label{eq:attractiveness}
+\end{equation}
+
+\textbf{Отбор кандидатов:} $\mathrm{score}(p) \geq 0{,}05$, не более 8~POI,
+сортировка по убыванию $\mathrm{score}$.
+
+\section{Формула Haversine}
+\label{sec:haversine}
+
+Расстояние между двумя точками на сфере радиуса $R = 6371$~км вычисляется по
+формуле Haversine \cite{sinnot1984,snyder1987}:
+\begin{align}
+  a &= \sin^2\!\frac{\Delta\varphi}{2} +
+       \cos\varphi_1 \cos\varphi_2 \sin^2\!\frac{\Delta\lambda}{2},
+       \label{eq:haversine-a} \\
+  d_H &= 2R \cdot \arctan2(\sqrt{a}, \sqrt{1 - a}),
+  \label{eq:haversine-d}
+\end{align}
+где $\varphi$ --- широта, $\lambda$ --- долгота, $\Delta\varphi = \varphi_2 - \varphi_1$,
+$\Delta\lambda = \lambda_2 - \lambda_1$.
+
+Формула используется для:
+\begin{itemize}
+  \item весов рёбер графа;
+  \item перпендикулярного расстояния в \eqref{eq:poi-score};
+  \item fallback-расчёта длины маршрута при недоступности OSRM;
+  \item коэффициента детour $\mathrm{detourRatio} = d_{\mathrm{route}} / d_H(S, E)$.
+\end{itemize}
+
+Погрешность Haversine для расстояний до нескольких километров не превышает 0{,}5\%,
+что достаточно для задачи планирования прогулок \cite{karney2013}.
+
+\section{Построение взвешенного графа}
+
+\subsection{Множество вершин}
+
+\begin{equation}
+  V = \{\mathrm{start}, \mathrm{end}\} \cup \{p \in \mathcal{P}_\mathrm{cand}\},
+  \label{eq:vertices}
+\end{equation}
+где $|\mathcal{P}_\mathrm{cand}| \leq 8$. Вершины \texttt{start} и \texttt{end}
+имеют $\tilde{A} = 0$; POI-вершины --- $\tilde{A}(p)$ из \eqref{eq:attractiveness}.
+
+\subsection{Множество рёбер}
+
+Граф \textbf{неориентированный}, представлен списком смежности. Рёбра создаются по
+двум правилам (объединение):
+\begin{enumerate}
+  \item \textbf{k-NN}: для каждой вершины --- $k = 4$ ближайших соседа по $d_H$;
+  \item \textbf{Порог}: все пары $(u, v)$ с $d_H(u, v) \leq 3{,}5$~км.
+\end{enumerate}
+
+Дублирование исключается условием $j > i$ при переборе пар.
+
+\subsection{Функция веса ребра}
+
+Ключевая формула работы --- \textbf{привлекательностно-взвешенное расстояние}:
+\begin{equation}
+  w(u, v) = \frac{d_H(u, v)}{1 + \eta \cdot \max\bigl(\tilde{A}(u), \tilde{A}(v)\bigr)},
+  \label{eq:edge-weight}
+\end{equation}
+где $\eta = 2{,}5$ --- коэффициент «притяжения» к качественным локациям.
+
+\textbf{Интерпретация.} Чем выше привлекательность хотя бы одной из вершин ребра,
+тем меньше его вес. Алгоритм Dijkstra, минимизируя сумму весов, «выбирает» проход
+через парки и набережные при прочих равных, не нарушая связности графа.
+
+\begin{figure}[H]
+\centering
+\fbox{\parbox{0.85\textwidth}{\centering\vspace{2.5cm}
+Схема графа: start $\leftrightarrow$ POI$_1$ $\leftrightarrow$ POI$_2$ $\leftrightarrow$ end\\
+(веса рёбер пропорциональны $d_H$, обратно --- $\tilde{A}$)\vspace{2.5cm}}}
+\caption{Пример абстрактного графа маршрута}
+\label{fig:graph-scheme}
+\end{figure}
+
+\section{Алгоритм Dijkstra}
+\label{sec:dijkstra}
+
+После построения $G = (V, E)$ решается задача одноисточникового кратчайшего пути
+от \texttt{start} до \texttt{end} \cite{dijkstra1959,cormen2022}.
+
+\subsection{Формулировка}
+
+Дано: граф с неотрицательными весами $w(u,v) \geq 0$. Найти путь $P^*$ минимизирующий
+\begin{equation}
+  W(P) = \sum_{(u,v) \in P} w(u, v).
+  \label{eq:path-weight}
+\end{equation}
+
+\textbf{Инвариант:} $\mathrm{dist}[v]$ --- текущая оценка минимального веса пути
+от источника до $v$.
+
+\textbf{Релаксация ребра} $(u, v)$:
+\begin{equation}
+  \mathrm{dist}[v] \leftarrow \min\bigl(\mathrm{dist}[v],\, \mathrm{dist}[u] + w(u, v)\bigr).
+  \label{eq:relaxation}
+\end{equation}
+
+\subsection{Псевдокод}
+
+\begin{enumerate}
+  \item Инициализация: $\mathrm{dist}[s] = 0$, $\mathrm{dist}[v] = \infty$ для $v \neq s$;
+  \item Пока очередь не пуста: извлечь вершину $u$ с минимальным $\mathrm{dist}[u]$;
+  \item Для каждого соседа $v$ выполнить релаксацию \eqref{eq:relaxation};
+  \item Восстановить путь по массиву \texttt{previous} от $t$ к $s$.
+\end{enumerate}
+
+\subsection{Корректность алгоритма}
+
+Алгоритм Dijkstra корректен для графов с неотрицательными весами рёбер
+\cite{dijkstra1959,cormen2022,kormen2022ru}. Схема доказательства:
+\begin{enumerate}
+  \item \textbf{База:} $\mathrm{dist}[s] = 0$ --- минимально возможное;
+  \item \textbf{Индукция:} при извлечении $u$ с минимальным $\mathrm{dist}[u]$
+        среди непосещённых, любой альтернативный путь через непосещённую $x$
+        имеет вес $\geq \mathrm{dist}[x] + w(x,u) \geq \mathrm{dist}[u]$;
+  \item следовательно, $\mathrm{dist}[u]$ окончательна и минимальна;
+  \item после релаксаций всех рёбер из $u$ инвариант сохраняется.
+\end{enumerate}
+
+В нашей модели $w(u,v) > 0$ при $d_H(u,v) > 0$, следовательно, условие
+неотрицательности выполняется. Отрицательных циклов нет.
+
+\subsection{Сложность}
+
+При использовании двоичной кучи (priority queue) сложность составляет
+$O((|V| + |E|) \log |V|)$ \cite{cormen2022}. В реализации Fun-Walk применяется
+сортировка массива перед каждым извлечением --- упрощение для $|V| \leq 10$,
+асимптотически $O(|V|^2 \log |V|)$, но с микроскопическим $|V|$ это пренебрежимо.
+
+Если путь не найден ($\mathrm{dist}[\mathrm{end}] = \infty$), выполняется fallback:
+прямой маршрут $S \to E$ через OSRM или отрезок без POI.
+
+\section{Маршрутизация OSRM}
+
+Абстрактный путь Dijkstra задаёт \emph{какие} POI посетить, но не \emph{как} пройти
+между ними по тротуарам. Для этого используется Open Source Routing Machine (OSRM)
+\cite{luxen-vetter2011,osrm2024}.
+
+\subsection{HTTP-запрос}
+
+Последовательность waypoints $(\lambda_i, \varphi_i)$ передаётся в endpoint:
+\begin{verbatim}
+GET /route/v1/foot/{lon,lat;lon,lat;...}
+    ?overview=full&geometries=geojson&steps=false
+\end{verbatim}
+
+Профиль \texttt{foot} ограничивает движение пешеходными дорожками OpenStreetMap.
+
+\subsection{Fallback-стратегия}
+
+\begin{enumerate}
+  \item Попытка одного запроса на все waypoints;
+  \item При ошибке --- попарная маршрутизация сегментов $[w_i, w_{i+1}]$ и склейка
+        GeoJSON LineString;
+  \item При полном отказе OSRM --- \texttt{routingSource = 'direct'}, waypoints =
+        вершины графа, метрики занижены.
+\end{enumerate}
+
+Timeout запроса: 15~с. Дедупликация геометрии: порог $\varepsilon = 10^{-5}$~град
+($\approx 1$~м).
+
+\section{Расчёт метрик маршрута}
+
+Пусть $d_{\mathrm{route}}$ --- длина из OSRM (или сумма $d_H$ по waypoints),
+$t_{\mathrm{route}}$ --- время OSRM или оценка $(d_{\mathrm{route}} / 5) \cdot 60$~мин
+(скорость 5~км/ч).
+
+\textbf{Итоговый балл} (0--100):
+\begin{multline}
+  \mathrm{Score} = 0{,}25 \cdot G + 0{,}15 \cdot B + 0{,}25 \cdot (100 - \overline{\mathrm{AQI}}) \\
+  + 0{,}15 \cdot (100 - \overline{\mathrm{noise}}) + 0{,}15 \cdot Q \cdot 10 \\
+  + E_{\mathrm{path}} \cdot 10 + B_{\mathrm{graph}},
+  \label{eq:total-score}
+\end{multline}
+где $G$ --- зелёное покрытие (\%), $B$ --- доля велодорожек (\%), $Q$ --- сумма
+нормированных $S(p)$ по посещённым POI, $E_{\mathrm{path}} = d_H(S,E) / d_{\mathrm{route}}$,
+$B_{\mathrm{graph}} = \min(15,\, 10 / W(P^*))$.
+
+Эвристики $G$ и $B$ учитывают число посещённых POI соответствующих типов и
+коэффициент детour; они не претендуют на точный spatial analysis, но обеспечивают
+согласованную обратную связь пользователю.
+
+\section{Обобщённый алгоритм}
+
+На рис.~\ref{fig:algorithm-flow} представлена блок-схема конвейера планирования.
+
+\begin{figure}[H]
+\centering
+\fbox{\parbox{0.9\textwidth}{\small
+\textbf{Вход:} $S$, $E$, $\mathbf{w}$, $\mathcal{P}$\\[0.3cm]
+1. Для каждой $p \in \mathcal{P}$: вычислить $\mathbf{f}(p)$, $S(p)$, $\mathrm{score}(p)$\\
+2. Отобрать $\mathcal{P}_\mathrm{cand}$ (до 8 POI)\\
+3. Построить $G=(V,E)$ с весами \eqref{eq:edge-weight}\\
+4. $P^* \leftarrow \mathrm{Dijkstra}(G, \mathrm{start}, \mathrm{end})$\\
+5. Waypoints $\leftarrow$ координаты вершин $P^*$\\
+6. $\Gamma \leftarrow \mathrm{OSRM\_foot}(\mathrm{Waypoints})$\\
+7. Вычислить метрики \eqref{eq:total-score}\\
+\textbf{Выход:} $\Gamma$, метрики, highlights
+\vspace{0.5cm}}}
+\caption{Блок-схема алгоритма RoutePlannerService.plan()}
+\label{fig:algorithm-flow}
+\end{figure}
+
+\section{Сравнение с эвристикой A*}
+
+Альтернативой Dijkstra является алгоритм A* \cite{hart1968}, использующий
+эвристическую функцию $h(v)$ --- оценку расстояния от $v$ до цели. При
+$h(v) = d_H(v, \mathrm{end})$ и admissible heuristic A* может сократить число
+просмотренных вершин. В графе Fun-Walk $|V| \leq 10$, поэтому выигрыш
+несущественен, а Dijkstra проще в реализации и отладке --- важно для
+учебного проекта.
+
+\section{Выводы по главе}
+
+Разработана математическая модель, включающая: линейную оценку POI в $\mathbb{R}^6$,
+штраф за геометрическое отклонение, формулу Haversine, привлекательностно-взвешенный
+граф и алгоритм Dijkstra. Двухэтапная схема (граф + OSRM) разделяет комбинаторную
+оптимизацию и топологическую проходимость. Параметры $\alpha$, $\eta$, $k$, пороги
+отбора и веса метрик \eqref{eq:total-score} являются настраиваемыми и могут
+калиброваться на реальных данных.

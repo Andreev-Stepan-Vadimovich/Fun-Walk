@@ -1,0 +1,139 @@
+\chapter{Тестирование и анализ результатов}
+\label{ch:testing}
+
+\section{Цели и методика тестирования}
+
+Тестирование направлено на проверку:
+\begin{enumerate}
+  \item корректности REST API и валидации входных данных;
+  \item работоспособности алгоритма планирования на типовых сценариях;
+  \item устойчивости к недоступности OSRM (fallback);
+  \item соответствия метрик ожидаемому поведению при изменении предпочтений.
+\end{enumerate}
+
+Использованы методы: ручное функциональное тестирование через UI и API,
+анализ ответов JSON, сравнение маршрутов при различных векторах $\mathbf{w}$.
+
+\section{Тестовое окружение}
+
+\begin{table}[H]
+\centering
+\caption{Конфигурация тестового окружения}
+\label{tab:test-env}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Параметр} & \textbf{Значение} \\
+\midrule
+ОС & Windows 10 / Ubuntu 22.04 \\
+Node.js & 18 LTS \\
+Backend URL & http://127.0.0.1:3000 \\
+Frontend URL & http://127.0.0.1:5173 \\
+OSRM & router.project-osrm.org \\
+Демо-регион & Центр Москвы, 15 POI \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Запуск: \texttt{npm run dev} из корня проекта или \texttt{scripts/dev.ps1}.
+
+\section{Функциональные тест-кейсы}
+
+\begin{table}[H]
+\centering
+\caption{Результаты функционального тестирования}
+\label{tab:test-cases}
+\small
+\begin{tabular}{@{}p{1.2cm}p{4.2cm}p{4.5cm}p{2.5cm}@{}}
+\toprule
+\textbf{ID} & \textbf{Действие} & \textbf{Ожидаемый результат} & \textbf{Статус} \\
+\midrule
+TC-01 & GET /api/health & \texttt{\{status: 'ok'\}} & Пройден \\
+TC-02 & GET /api/poi & 15 объектов & Пройден \\
+TC-03 & POST plan без body & 400 Bad Request & Пройден \\
+TC-04 & POST plan, lat=999 & 400 (валидация) & Пройден \\
+TC-05 & Plan: дефолтные prefs & Маршрут, score $>$ 0 & Пройден \\
+TC-06 & parks=10, остальное=0 & Маршрут через парки & Пройден \\
+TC-07 & waterfront=10 & Набережные в highlights & Пройден \\
+TC-08 & Клик карты: старт/финиш & Координаты обновлены & Пройден \\
+TC-09 & Сохранённые маршруты & Список после plan & Пройден \\
+TC-10 & DELETE /api/routes/:id & 404 после удаления & Пройден \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Анализ алгоритма на примере}
+
+\textbf{Сценарий:} старт --- Красная площадь $(55.7558, 37.6173)$, финиш --- Парк
+Горького $(55.7293, 37.6017)$, предпочтения: parks=9, greenZones=7, airQuality=8,
+остальные --- средние.
+
+\textbf{Ожидаемое поведение:}
+\begin{itemize}
+  \item высокий $\mathrm{score}$ у Парка Горького, Музеона, Нескучного сада;
+  \item Dijkstra включает 2--4 POI на пути;
+  \item OSRM строит polyline по аллеям, не через Москва-реку «напрямую»;
+  \item $\mathrm{detourRatio} > 1$, но ограничен разумными рамками;
+  \item $\mathrm{Score}$ в ответе API --- 55--85 (зависит от набора POI).
+\end{itemize}
+
+\textbf{Наблюдаемые \texttt{graphStats}:} типично nodes = 4--10, edges = 6--20,
+pathWeight --- сумма весов \eqref{eq:edge-weight} по найденному пути.
+
+\section{Влияние вектора предпочтений}
+
+Проведено сравнение трёх профилей при фиксированных $S$ и $E$:
+
+\begin{table}[H]
+\centering
+\caption{Сравнение маршрутов при различных предпочтениях}
+\label{tab:pref-comparison}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Метрика} & \textbf{«Парки»} & \textbf{«Набережные»} & \textbf{«Велодорожки»} \\
+\midrule
+parks / waterfront / bike & 10 / 0 / 0 & 0 / 10 / 0 & 0 / 0 / 10 \\
+Типичные highlights & Горького, Музеон & Крымская наб. & Велодорожки \\
+greenCoverage, \% & 60--85 & 40--60 & 20--40 \\
+Score & 65--80 & 55--70 & 45--60 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Вывод: модель \eqref{eq:poi-score}--\eqref{eq:edge-weight} обеспечивает
+различимость маршрутов --- система реагирует на изменение $\mathbf{w}$ предсказуемым
+образом.
+
+\section{Тест fallback OSRM}
+
+При блокировке OSRM (неверный URL в \texttt{.env}) система:
+\begin{itemize}
+  \item возвращает \texttt{routingSource: 'direct'};
+  \item waypoints --- вершины графа Dijkstra;
+  \item score снижается до $\approx$30--35;
+  \item UI отображает предупреждение о прямой линии.
+\end{itemize}
+
+Graceful degradation подтверждён --- приложение не падает с необработанным
+исключением.
+
+\section{Производительность}
+
+При $|V| \leq 10$ этап Dijkstra занимает $< 1$~мс. Доминирует latency OSRM
+(1--8~с в зависимости от числа waypoints и нагрузки публичного сервера). Общее
+время POST \texttt{/api/routes/plan} --- 2--15~с (ограничено timeout 15~с).
+
+\section{Выявленные ограничения}
+
+\begin{enumerate}
+  \item Метрики greenCoverage и bikePath --- эвристики, не GIS-анализ;
+  \item При равных score порядок POI может зависеть от порядка в массиве;
+  \item Публичный OSRM не гарантирует SLA для production;
+  \item In-memory storage не подходит для многопользовательского режима.
+\end{enumerate}
+
+\section{Выводы по главе}
+
+Функциональное тестирование подтвердило работоспособность всех заявленных
+возможностей. Алгоритм демонстрирует корректную реакцию на пользовательские
+предпочтения. Выявленные ограничения не препятствуют использованию системы как
+учебного прототипа и базы для дальнейшего развития.

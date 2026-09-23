@@ -1,0 +1,191 @@
+\chapter{Проектирование архитектуры программного комплекса}
+\label{ch:design}
+
+\section{Общая архитектура}
+
+Система Fun-Walk построена по классической трёхуровневой схеме «клиент ---
+прикладной сервер --- внешний сервис маршрутизации». На рис.~\ref{fig:architecture}
+показано взаимодействие компонентов.
+
+\begin{figure}[H]
+\centering
+\fbox{\parbox{0.92\textwidth}{\small\centering
+\textbf{Frontend (React SPA, :5173)}\\
+PreferencesPanel \textbar{} MapView \textbar{} RouteStats \textbar{} SavedRoutes\\
+$\downarrow$ fetch('/api/...') $\downarrow$\\[0.4cm]
+\textbf{Vite dev proxy} $\to$ \textbf{Backend (NestJS, :3000)}\\
+RoutesController $\to$ RoutesService $\to$ RoutePlannerService\\
+\hspace{2cm}$\to$ Dijkstra + POI scoring + OsrmRoutingService\\[0.4cm]
+\textbf{OSRM} (router.project-osrm.org, profile foot)\\
+\textbf{OpenStreetMap} tiles (Leaflet)
+\vspace{0.6cm}}}
+\caption{Архитектура системы Fun-Walk}
+\label{fig:architecture}
+\end{figure}
+
+Клиент не содержит алгоритмической логики планирования --- все вычисления
+выполняются на сервере, что упрощает сопровождение и позволяет в будущем заменить
+алгоритм без обновления frontend.
+
+\section{Модульная структура backend}
+
+Backend организован в соответствии с принципами NestJS:
+
+\begin{itemize}
+  \item \texttt{AppModule} --- корневой модуль, подключает \texttt{ConfigModule}
+        и \texttt{RoutesModule};
+  \item \texttt{RoutesController} --- REST API, валидация DTO;
+  \item \texttt{RoutesService} --- CRUD маршрутов, in-memory хранилище
+        \texttt{Map<string, PlannedRoute>};
+  \item \texttt{RoutePlannerService} --- оркестрация алгоритма (глава~\ref{ch:math});
+  \item \texttt{OsrmRoutingService} --- HTTP-клиент OSRM.
+\end{itemize}
+
+Подмодуль \texttt{planner/} выделен явно для курсовой:
+\begin{verbatim}
+planner/
+  route-planner.service.ts   # plan(), buildWeightedGraph(), calculateMetrics()
+  math/geo.util.ts           # Haversine, projectOntoSegment, dotProduct
+  math/poi-scoring.util.ts   # scorePois, selectCandidatePois
+  graph/dijkstra.ts          # dijkstra()
+  graph/graph.types.ts       # WeightedGraph, GraphNode, DijkstraResult
+  routing/osrm-routing.service.ts
+\end{verbatim}
+
+\section{Структуры данных}
+
+Ключевые типы определены в \texttt{route.interface.ts} и \texttt{graph.types.ts}.
+
+\subsection{Точка и POI}
+
+\begin{lstlisting}[language=TypeScript,caption={Фрагмент интерфейса PointOfInterest},label={lst:poi-interface}]
+interface PointOfInterest {
+  id: string;
+  name: string;
+  type: 'park' | 'green_zone' | 'bike_path'
+      | 'waterfront' | 'square';
+  location: LatLng;
+  airQualityIndex: number;  // AQI
+  noiseLevel: number;       // dB
+  areaHa: number;
+}
+\end{lstlisting}
+
+\subsection{Граф}
+
+\begin{lstlisting}[language=TypeScript,caption={Типы взвешенного графа},label={lst:graph-types}]
+interface GraphNode {
+  id: string;
+  location: LatLng;
+  attractiveness: number;  // [0, 1]
+  isPoi: boolean;
+  poiName?: string;
+}
+
+interface WeightedGraph {
+  nodes: Map<string, GraphNode>;
+  adjacency: Map<string, { targetId: string; weight: number }[]>;
+}
+\end{lstlisting}
+
+Использование \texttt{Map} обеспечивает $O(1)$ доступ к вершинам по идентификатору.
+
+\subsection{Результат планирования}
+
+Объект \texttt{PlannedRoute} включает поля для отчётности: \texttt{algorithm:
+'dijkstra'}, \texttt{routingSource}, \texttt{graphStats: \{ nodes, edges, pathWeight \}}.
+
+\section{REST API}
+
+Контроллер \texttt{@Controller('api')} экспонирует endpoints (табл.~\ref{tab:api}).
+
+\begin{table}[H]
+\centering
+\caption{REST API системы Fun-Walk}
+\label{tab:api}
+\begin{tabular}{@{}llp{7cm}@{}}
+\toprule
+\textbf{Метод} & \textbf{Путь} & \textbf{Назначение} \\
+\midrule
+GET & /api/health & Проверка работоспособности \\
+GET & /api/defaults & Старт/финиш по умолчанию \\
+GET & /api/poi & Список POI \\
+GET & /api/routes & Сохранённые маршруты \\
+GET & /api/routes/:id & Детали маршрута \\
+POST & /api/routes/plan & Построение маршрута \\
+DELETE & /api/routes/:id & Удаление \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+DTO \texttt{PlanRouteDto} валидируется через \texttt{class-validator}:
+$\varphi \in [-90, 90]$, $\lambda \in [-180, 180]$, preferences $\in [0, 10]$.
+
+\section{Проектирование frontend}
+
+Frontend --- одностраничное приложение (SPA) с компонентной декомпозицией:
+
+\begin{itemize}
+  \item \texttt{App.tsx} --- состояние приложения, вызовы API;
+  \item \texttt{PreferencesPanel} --- шесть ползунков, режим выбора точки;
+  \item \texttt{MapView} --- Leaflet, polyline, маркеры, fitBounds;
+  \item \texttt{RouteStats} --- метрики и кольцевой индикатор score;
+  \item \texttt{SavedRoutes} --- список маршрутов сессии.
+\end{itemize}
+
+Vite проксирует \texttt{/api/*} на \texttt{http://127.0.0.1:3000}, устраняя CORS
+в режиме разработки. Production-сборка предполагает reverse proxy или настройку
+\texttt{CORS\_ORIGINS} в \texttt{.env}.
+
+\section{Конфигурация и развёртывание}
+
+Переменные окружения (\texttt{backend/.env}):
+
+\begin{table}[H]
+\centering
+\caption{Конфигурационные параметры}
+\label{tab:env}
+\begin{tabular}{@{}llp{6.5cm}@{}}
+\toprule
+\textbf{Переменная} & \textbf{По умолчанию} & \textbf{Описание} \\
+\midrule
+PORT & 3000 & Порт API \\
+HOST & 0.0.0.0 & Адрес прослушивания \\
+OSRM\_URL & router.project-osrm.org & Базовый URL OSRM \\
+CORS\_ORIGINS & localhost:5173 & Разрешённые origin \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Корневой \texttt{package.json} использует \texttt{concurrently} для команды
+\texttt{npm run dev}. Скрипты \texttt{scripts/dev.ps1}, \texttt{dev.sh}, \texttt{dev.bat}
+автоматизируют установку и запуск на Windows и Linux.
+
+\section{Диаграмма последовательности POST /api/routes/plan}
+
+\begin{enumerate}
+  \item Клиент отправляет JSON с \texttt{start}, \texttt{end}, \texttt{preferences};
+  \item \texttt{RoutesController} валидирует DTO;
+  \item \texttt{RoutesService.planRoute()} вызывает \texttt{RoutePlannerService.plan()};
+  \item Planner: scoring $\to$ graph $\to$ Dijkstra $\to$ OSRM $\to$ metrics;
+  \item Сервис сохраняет \texttt{PlannedRoute} в Map, возвращает UUID;
+  \item Клиент отображает polyline и обновляет список маршрутов.
+\end{enumerate}
+
+\section{Ограничения проектных решений}
+
+\begin{itemize}
+  \item Хранение маршрутов in-memory --- данные теряются при перезапуске;
+  \item POI статичны, не загружаются из Overpass API;
+  \item AQI и шум --- заданные константы, не live-данные;
+  \item Зависимость от публичного OSRM (rate limits, SLA).
+\end{itemize}
+
+Эти ограничения задокументированы как направления развития (глава~\ref{ch:conclusion}).
+
+\section{Выводы по главе}
+
+Спроектирована модульная клиент-серверная архитектура с чётким разделением
+ответственности: UI, REST, алгоритмы, внешняя маршрутизация. Структуры данных
+и API спроектированы с учётом требований курсовой отчётности (\texttt{graphStats},
+\texttt{algorithm}).

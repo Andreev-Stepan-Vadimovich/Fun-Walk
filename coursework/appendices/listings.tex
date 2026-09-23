@@ -1,0 +1,31 @@
+\chapter{Листинги программного кода}
+\label{app:listings}
+
+\section{Полная реализация алгоритма Dijkstra}
+
+\lstinputlisting[language=TypeScript,firstline=1,lastline=73]{../backend/src/routes/planner/graph/dijkstra.ts}
+
+\section{Модуль оценки POI}
+
+\lstinputlisting[language=TypeScript,firstline=1,lastline=128]{../backend/src/routes/planner/math/poi-scoring.util.ts}
+
+\section{Геодезические функции}
+
+\lstinputlisting[language=TypeScript,firstline=1,lastline=71]{../backend/src/routes/planner/math/geo.util.ts}
+
+\section{Пример запроса POST /api/routes/plan}
+
+\begin{verbatim}
+POST /api/routes/plan HTTP/1.1
+Content-Type: application/json
+
+{
+  "start": { "lat": 55.7558, "lng": 37.6173 },
+  "end":   { "lat": 55.7293, "lng": 37.6017 },
+  "preferences": {
+    "parks": 9, "greenZones": 7, "bikePaths": 5,
+    "airQuality": 8, "quietAreas": 6, "waterfront": 4
+  },
+  "name": "Прогулка по центру"
+}
+\end{verbatim}

@@ -4,23 +4,36 @@ export default {
   theme: {
     extend: {
       colors: {
-        forest: {
-          50: '#f0fdf4',
-          100: '#dcfce7',
-          200: '#bbf7d0',
-          300: '#86efac',
-          400: '#4ade80',
-          500: '#22c55e',
-          600: '#16a34a',
-          700: '#15803d',
-          800: '#166534',
-          900: '#14532d',
-          950: '#052e16',
+        sage: {
+          50: '#f4faf5',
+          100: '#e6f3e8',
+          200: '#c8e6cc',
+          300: '#a8d5ae',
+          400: '#86c095',
+          500: '#6aab7a',
+          600: '#528f62',
+          700: '#42734f',
+          800: '#375c42',
+          900: '#2f4c38',
+          950: '#1a2e21',
         },
-        moss: {
-          400: '#a3e635',
-          500: '#84cc16',
-          600: '#65a30d',
+        blush: {
+          50: '#fdf5f7',
+          100: '#fce8ee',
+          200: '#f9d0dc',
+          300: '#f3adc0',
+          400: '#e88aa4',
+          500: '#d96a88',
+          600: '#c04d6c',
+          700: '#a03d57',
+          800: '#85364b',
+          900: '#713142',
+          950: '#431722',
+        },
+        cream: {
+          50: '#fefdfb',
+          100: '#faf8f4',
+          200: '#f5f0e8',
         },
       },
       fontFamily: {
@@ -28,8 +41,9 @@ export default {
         display: ['Outfit', 'Inter', 'sans-serif'],
       },
       boxShadow: {
-        glow: '0 0 40px rgba(34, 197, 94, 0.15)',
-        card: '0 8px 32px rgba(0, 0, 0, 0.12)',
+        glow: '0 0 32px rgba(134, 192, 149, 0.2)',
+        'glow-pink': '0 0 32px rgba(232, 138, 164, 0.18)',
+        card: '0 4px 24px rgba(82, 143, 98, 0.08)',
       },
       animation: {
         'fade-in': 'fadeIn 0.5s ease-out',

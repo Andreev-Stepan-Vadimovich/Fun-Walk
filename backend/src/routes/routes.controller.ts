@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   Post,
+  Query,
 } from '@nestjs/common';
 import { RoutesService } from './routes.service';
 import { PlanRouteDto } from './dto/plan-route.dto';
@@ -19,7 +20,30 @@ export class RoutesController {
   }
 
   @Get('poi')
-  getPointsOfInterest() {
+  getPointsOfInterest(
+    @Query('startLat') startLat?: string,
+    @Query('startLng') startLng?: string,
+    @Query('endLat') endLat?: string,
+    @Query('endLng') endLng?: string,
+  ) {
+    const start =
+      startLat && startLng
+        ? { lat: Number(startLat), lng: Number(startLng) }
+        : null;
+    const end =
+      endLat && endLng ? { lat: Number(endLat), lng: Number(endLng) } : null;
+
+    if (
+      start &&
+      end &&
+      Number.isFinite(start.lat) &&
+      Number.isFinite(start.lng) &&
+      Number.isFinite(end.lat) &&
+      Number.isFinite(end.lng)
+    ) {
+      return this.routesService.getPointsOfInterestNear(start, end);
+    }
+
     return this.routesService.getPointsOfInterest();
   }
 

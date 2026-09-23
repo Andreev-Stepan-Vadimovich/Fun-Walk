@@ -1,0 +1,110 @@
+% Настройки оформления по ГОСТ 7.32-2017 (отчёт о НИР / пояснительная записка)
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{gost}[2026/09/01 v1.0 GOST formatting for coursework]
+
+\RequirePackage[
+  a4paper,
+  left=30mm,
+  right=15mm,
+  top=20mm,
+  bottom=20mm
+]{geometry}
+
+\RequirePackage{setspace}
+\onehalfspacing
+
+\RequirePackage{indentfirst}
+\setlength{\parindent}{1.25cm}
+
+\RequirePackage{titlesec}
+\titleformat{\chapter}[display]
+  {\normalfont\bfseries\centering}
+  {\chaptertitlename\ \thechapter}
+  {0pt}
+  {\MakeUppercase}
+\titlespacing*{\chapter}{0pt}{-10pt}{20pt}
+
+\titleformat{\section}
+  {\normalfont\bfseries}
+  {\thesection}
+  {1em}
+  {}
+\titleformat{\subsection}
+  {\normalfont\bfseries}
+  {\thesubsection}
+  {1em}{}
+
+\RequirePackage{caption}
+\captionsetup{
+  labelsep=endash,
+  font=small,
+  skip=6pt
+}
+
+\RequirePackage{enumitem}
+\setlist{nosep, leftmargin=*}
+\setlist[itemize]{label=--}
+
+\setcounter{secnumdepth}{3}
+\setcounter{tocdepth}{2}
+
+\RequirePackage{graphicx}
+\RequirePackage{float}
+\RequirePackage{booktabs}
+\RequirePackage{longtable}
+\RequirePackage{array}
+\RequirePackage{multirow}
+\RequirePackage{amsmath,amssymb,amsfonts}
+\RequirePackage{mathtools}
+\RequirePackage{listings}
+\RequirePackage{xcolor}
+\RequirePackage{hyperref}
+\RequirePackage{lastpage}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=black,
+  citecolor=black,
+  urlcolor=blue,
+  pdfborder={0 0 0}
+}
+
+\definecolor{codebg}{RGB}{248,248,248}
+\definecolor{codeframe}{RGB}{200,200,200}
+\definecolor{codekeyword}{RGB}{0,0,128}
+\definecolor{codestring}{RGB}{163,21,21}
+
+\lstdefinestyle{gostcode}{
+  backgroundcolor=\color{codebg},
+  basicstyle=\small\ttfamily,
+  breaklines=true,
+  breakatwhitespace=false,
+  captionpos=b,
+  commentstyle=\itshape\color{gray},
+  frame=single,
+  rulecolor=\color{codeframe},
+  keywordstyle=\bfseries\color{codekeyword},
+  stringstyle=\color{codestring},
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  stepnumber=1,
+  tabsize=2,
+  showstringspaces=false,
+  xleftmargin=1.5em,
+  framexleftmargin=1.5em,
+  aboveskip=1em,
+  belowskip=1em
+}
+\lstset{style=gostcode}
+
+\newcommand{\courseworktitle}{Разработка веб-приложения для планирования пешеходных маршрутов с учётом пользовательских предпочтений}
+\newcommand{\courseworktype}{Курсовая работа}
+\newcommand{\university}{НАЗВАНИЕ УНИВЕРСИТЕТА}
+\newcommand{\faculty}{НАЗВАНИЕ ФАКУЛЬТЕТА}
+\newcommand{\department}{НАЗВАНИЕ КАФЕДРЫ}
+\newcommand{\studentname}{Фамилия И.~О.}
+\newcommand{\studentgroup}{Группа ХХ-ХХ}
+\newcommand{\supervisor}{доц. кафедры, к.т.н. Фамилия И.~О.}
+\newcommand{\city}{Город}
+\newcommand{\yearwork}{2026}
+
+\endinput

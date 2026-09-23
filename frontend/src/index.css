@@ -4,33 +4,41 @@
 
 @layer base {
   body {
-    @apply bg-forest-950 text-forest-50 antialiased;
+    @apply bg-cream-100 text-sage-900 antialiased;
   }
 }
 
 @layer components {
   .glass-card {
-    @apply rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-card;
+    @apply rounded-2xl border border-sage-200/80 bg-white/70 backdrop-blur-xl shadow-card;
   }
 
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-forest-500 to-moss-500 px-5 py-3 font-semibold text-white shadow-glow transition hover:from-forest-400 hover:to-moss-400 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-sage-400 to-sage-500 px-5 py-3 font-semibold text-white shadow-glow transition hover:from-sage-500 hover:to-sage-600 disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-forest-100 transition hover:bg-white/10;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-sage-200 bg-white/80 px-4 py-2.5 text-sm font-medium text-sage-700 transition hover:border-blush-200 hover:bg-blush-50;
+  }
+
+  .preset-btn {
+    @apply flex flex-col items-start rounded-xl border border-sage-200/80 bg-white/60 p-3 text-left transition hover:border-sage-300 hover:bg-sage-50/80;
+  }
+
+  .preset-btn-active {
+    @apply border-sage-400 bg-gradient-to-br from-sage-50 to-blush-50 ring-2 ring-sage-300/50 shadow-glow;
   }
 
   .pref-slider {
-    @apply h-2 w-full cursor-pointer appearance-none rounded-full bg-forest-800/80;
+    @apply h-2 w-full cursor-pointer appearance-none rounded-full bg-sage-100;
   }
 
   .pref-slider::-webkit-slider-thumb {
-    @apply h-5 w-5 cursor-pointer appearance-none rounded-full border-2 border-forest-950 bg-forest-400 shadow-glow transition hover:bg-forest-300;
+    @apply h-5 w-5 cursor-pointer appearance-none rounded-full border-2 border-white bg-gradient-to-br from-sage-400 to-blush-300 shadow-md transition hover:from-sage-500 hover:to-blush-400;
   }
 
   .pref-slider::-moz-range-thumb {
-    @apply h-5 w-5 cursor-pointer rounded-full border-2 border-forest-950 bg-forest-400;
+    @apply h-5 w-5 cursor-pointer rounded-full border-2 border-white bg-gradient-to-br from-sage-400 to-blush-300;
   }
 }
 
@@ -41,11 +49,16 @@
 
 .leaflet-popup-content-wrapper {
   border-radius: 12px !important;
-  background: #052e16 !important;
-  color: #dcfce7 !important;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #f4faf5 !important;
+  color: #375c42 !important;
+  border: 1px solid rgba(134, 192, 149, 0.3);
 }
 
 .leaflet-popup-tip {
-  background: #052e16 !important;
+  background: #f4faf5 !important;
+}
+
+.route-stop-icon {
+  background: transparent !important;
+  border: none !important;
 }

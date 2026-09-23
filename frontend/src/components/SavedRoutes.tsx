@@ -15,12 +15,12 @@ export default function SavedRoutes({
 }: Props) {
   return (
     <div className="glass-card p-5">
-      <h2 className="mb-3 font-display text-lg font-semibold text-white">
+      <h2 className="mb-3 font-display text-lg font-semibold text-sage-800">
         Сохранённые маршруты
       </h2>
 
       {routes.length === 0 ? (
-        <p className="text-sm text-forest-400">
+        <p className="text-sm text-sage-500">
           Постройте первый маршрут — он появится здесь
         </p>
       ) : (
@@ -30,8 +30,8 @@ export default function SavedRoutes({
               key={route.id}
               className={`group flex items-center justify-between rounded-xl border p-3 transition ${
                 activeId === route.id
-                  ? 'border-forest-500/50 bg-forest-500/10'
-                  : 'border-white/5 bg-forest-900/30 hover:bg-forest-900/50'
+                  ? 'border-sage-400/60 bg-sage-50/80'
+                  : 'border-sage-100 bg-white/50 hover:bg-sage-50/60'
               }`}
             >
               <button
@@ -39,20 +39,25 @@ export default function SavedRoutes({
                 className="min-w-0 flex-1 text-left"
                 onClick={() => onLoad(route.id)}
               >
-                <p className="truncate text-sm font-medium text-forest-100">
+                <p className="truncate text-sm font-medium text-sage-800">
                   {route.name}
                 </p>
-                <p className="text-xs text-forest-500">
+                <p className="text-xs text-sage-500">
                   {route.distanceKm} км · балл {route.score}
                 </p>
               </button>
               <button
                 type="button"
-                className="ml-2 rounded-lg p-1.5 text-forest-500 opacity-0 transition hover:bg-red-500/10 hover:text-red-400 group-hover:opacity-100"
+                className="ml-2 rounded-lg p-1.5 text-sage-400 opacity-0 transition hover:bg-blush-50 hover:text-blush-500 group-hover:opacity-100"
                 onClick={() => onDelete(route.id)}
                 title="Удалить"
               >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg
+                  className="h-4 w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
